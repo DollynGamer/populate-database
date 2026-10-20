@@ -1,0 +1,35 @@
+{
+    "table": "clientes",
+    "columns": [
+        {
+            "name": "nome",
+            "type": "VARCHAR(100)",
+            "generator": "nome",
+            "options": {}
+        },
+        {
+            "name": "idade",
+            "type": "INT",
+            "generator": "idade",
+            "options": {
+                "min": 18,
+                "max": 80
+            }
+        },
+        {
+            "name": "email",
+            "type": "VARCHAR(150)",
+            "generator": "auto",
+            "options": {}
+        },
+        {
+            "name": "saldo",
+            "type": "DECIMAL(10,2)",
+            "generator": "decimal",
+            "options": {
+                "min": 100,
+                "max": 10000
+            }
+        }
+    ]
+}
