@@ -18,8 +18,14 @@
         },
         {
             "name": "email",
-            "type": "VARCHAR(150)",
-            "generator": "auto",
+            "type": "VARCHAR(100)",
+            "generator": "email",
+            "options": {}
+        },
+        {
+            "name": "cidade",
+            "type": "VARCHAR(100)",
+            "generator": "cidade",
             "options": {}
         },
         {
@@ -30,6 +36,12 @@
                 "min": 100,
                 "max": 10000
             }
+        },
+        {
+            "name": "ativo",
+            "type": "BOOLEAN",
+            "generator": "booleano",
+            "options": {}
         }
     ]
 }
