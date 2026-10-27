@@ -11,7 +11,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from openpyxl import Workbook
-from legacy import gerar_valor
+from generators import iterar_registros
 
 
 FORMATOS = {
@@ -83,16 +83,6 @@ def pasta_downloads():
     return downloads
 
 
-def gerar_registros(config, quantidade):
-    # produz um registro por vez, sem criar uma lista gigante
-
-    for _ in range(quantidade):
-        yield {
-            coluna["name"]: gerar_valor(coluna)
-            for coluna in config["columns"]
-        }
-
-
 def nome_arquivo(config, formato):
     tabela = config["table"]
 
@@ -123,7 +113,7 @@ def exportar_json(config, quantidade, caminho):
         arquivo.write("[\n")
 
         for indice, registro in enumerate(
-            gerar_registros(config, quantidade)
+            iterar_registros(config, quantidade)
         ):
             if indice:
                 arquivo.write(",\n")
@@ -160,7 +150,7 @@ def exportar_csv(config, quantidade, caminho):
 
         escritor.writeheader()
 
-        for registro in gerar_registros(config, quantidade):
+        for registro in iterar_registros(config, quantidade):
             escritor.writerow(registro)
 
 
@@ -223,7 +213,7 @@ def exportar_sql(config, quantidade, caminho):
         arquivo.write(criar_tabela_sql(config))
         arquivo.write("\n")
 
-        for registro in gerar_registros(config, quantidade):
+        for registro in iterar_registros(config, quantidade):
             valores = ", ".join(
                 valor_sql(registro[nome])
                 for nome in nomes
@@ -264,7 +254,7 @@ def exportar_sqlite(config, quantidade, caminho):
 
         lote = []
 
-        for registro in gerar_registros(config, quantidade):
+        for registro in iterar_registros(config, quantidade):
             lote.append(
                 tuple(registro[nome] for nome in nomes)
             )
@@ -307,7 +297,7 @@ def exportar_excel(config, quantidade, caminho):
 
     planilha.append(nomes)
 
-    for registro in gerar_registros(config, quantidade):
+    for registro in iterar_registros(config, quantidade):
         planilha.append([
             registro[nome]
             for nome in nomes

@@ -6,63 +6,9 @@ import sqlite3
 
 from pathlib import Path
 from openpyxl import load_workbook
-
-
-GERADORES = {
-    "auto", "nome", "email", "idade", "inteiro",
-    "decimal", "cidade", "texto", "data", "booleano",
-    "telefone", "uuid",
-}
-
-TIPOS = {
-    "INT", "BIGINT", "FLOAT", "DOUBLE", "DECIMAL(10,2)",
-    "VARCHAR(100)", "CHAR(10)", "TEXT", "BOOLEAN",
-    "DATE", "DATETIME", "UUID",
-}
+from catalog import (GERADORES, TIPOS_SQL, detectar_gerador, tipo_do_gerador, normalizar_coluna)
 
 IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-
-
-def detectar_gerador(nome):
-    nome = nome.lower()
-
-    regras = {
-        "email": ("email", "e_mail"),
-        "nome": ("nome", "name"),
-        "idade": ("idade", "age"),
-        "cidade": ("cidade", "city"),
-        "telefone": ("telefone", "celular", "phone"),
-        "data": ("data", "date", "nascimento"),
-        "uuid": ("uuid",),
-        "booleano": ("ativo", "active", "habilitado"),
-        "texto": ("descricao", "description", "observacao"),
-        "decimal": ("salario", "preco", "valor", "dinheiro"),
-        "inteiro": ("quantidade", "qtd", "estoque"),
-    }
-
-    for gerador, palavras in regras.items():
-        if any(palavra in nome for palavra in palavras):
-            return gerador
-
-    return None
-
-
-def tipo_do_gerador(gerador):
-    tipos = {
-        "nome": "VARCHAR(100)",
-        "email": "VARCHAR(100)",
-        "cidade": "VARCHAR(100)",
-        "telefone": "VARCHAR(100)",
-        "texto": "TEXT",
-        "idade": "INT",
-        "inteiro": "INT",
-        "decimal": "DECIMAL(10,2)",
-        "data": "DATE",
-        "booleano": "BOOLEAN",
-        "uuid": "UUID",
-    }
-
-    return tipos.get(gerador, "VARCHAR(100)")
 
 
 def normalizar_nome(nome):
@@ -77,6 +23,27 @@ def normalizar_nome(nome):
         nome = "_" + nome
 
     return nome
+
+def nome_tabela_arquivo(caminho):
+    # obtem o nome da tabela a partir do arquivo, removendo timestamps
+
+    nome = Path(caminho).stem
+
+    # remove o YYYYMMDD_HHMMSS do final
+    nome = re.sub(
+        r"_\d{8}_\d{6}$",
+        "",
+        nome
+    )
+
+    # remove sufixos de arquivos duplicados
+    nome = re.sub(
+        r"_\d{8}_\d{6}_\d+$",
+        "",
+        nome
+    )
+
+    return normalizar_nome(nome)
 
 
 def criar_colunas(nomes):
@@ -128,7 +95,7 @@ def importar_csv(caminho):
         raise ValueError("O CSV está vazio.")
 
     return {
-        "table": normalizar_nome(Path(caminho).stem),
+        "table": nome_tabela_arquivo(caminho),
         "columns": criar_colunas(cabecalho),
     }
 
@@ -188,22 +155,33 @@ def importar_json(caminho):
             nome = normalizar_nome(coluna["name"])
             gerador = coluna.get("generator", "auto")
 
+            if gerador == "idade":
+                gerador = "inteiro"
+
+                opcoes = dict(coluna.get("options") or {})
+                opcoes.setdefault("min", 18)
+                opcoes.setdefault("max", 90)
+            else:
+                opcoes = dict(coluna.get("options") or {})
+
             if gerador not in GERADORES:
                 gerador = None
 
-            colunas.append({
-                "name": nome,
-                "type": coluna.get("type", "VARCHAR(100)"),
-                "generator": gerador,
-                "options": coluna.get("options", {}),
-            })
+            colunas.append(
+                normalizar_coluna({
+                    "name": nome,
+                    "type": coluna.get("type", "VARCHAR(100)"),
+                    "generator": gerador,
+                    "options": opcoes
+                })
+            )
 
         if not colunas:
             raise ValueError("O JSON não possui colunas.")
 
         return {
             "table": normalizar_nome(
-                dados.get("table", Path(caminho).stem)
+                dados.get("table", nome_tabela_arquivo(caminho))
             ),
             "columns": colunas,
         }
@@ -223,7 +201,7 @@ def importar_json(caminho):
         ))
 
         return {
-            "table": normalizar_nome(Path(caminho).stem),
+            "table": normalizar_nome(nome_tabela_arquivo(caminho)),
             "columns": criar_colunas(nomes),
         }
 
@@ -301,7 +279,7 @@ def importar_sqlite(caminho, tabela):
 
             tipo = equivalencias.get(tipo_base, tipo_base)
 
-            if tipo not in TIPOS:
+            if tipo not in TIPOS_SQL:
                 tipo = "TEXT"
 
             gerador = detectar_gerador(nome)

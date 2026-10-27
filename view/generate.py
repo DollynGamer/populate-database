@@ -2,23 +2,7 @@ import flet as ft
 from generator import gerar_amostra
 from validators import validar_config
 from view.exporter_screen import construir_exportacao
-
-TIPOS = ['INT', 'BIGINT', 'FLOAT', 'DOUBLE', 'DECIMAL(10,2)', 'VARCHAR(100)', 'CHAR(10)', 'TEXT', 'BOOLEAN', 'DATE', 'DATETIME', 'UUID']
-GERADORES = {
-    'auto': 'Automático', 
-    'nome': 'Nome completo', 
-    'email': 'E-mail',
-    'idade': 'Idade', 
-    'inteiro': 'Inteiro', 
-    'decimal': 'Decimal',
-    'cidade': 'Cidade', 
-    'texto': 'Texto', 
-    'data': 'Data',
-    'booleano': 'Booleano', 
-    'telefone': 'Telefone', 
-    'uuid': 'UUID',
-}
-NUMERICOS = {'idade', 'inteiro', 'decimal'}
+from catalog import (TIPOS_SQL, GERADORES, NUMERICOS, interpretar_tipo_sql, montar_tipo_sql, normalizar_coluna)
 
 
 def construir_gerador(voltar, atualizar, config_inicial=None):
@@ -35,7 +19,7 @@ def construir_gerador(voltar, atualizar, config_inicial=None):
         amostra.controls = []
 
     def adicionar_coluna(e=None, dados=None):
-        dados = dados or {}
+        dados = normalizar_coluna(dados or {})
         numero = len(linhas) + 1
         campo_nome = ft.TextField(
             label='Nome da coluna',
@@ -43,15 +27,96 @@ def construir_gerador(voltar, atualizar, config_inicial=None):
             value=dados.get('name', ''),
             width=420,
         )
+        # recuperar o tipo SQL de uma configuracao importada
+        tipo_importado = dados.get("type")
+
+        if tipo_importado:
+            tipo_inicial, parametros = interpretar_tipo_sql(
+                tipo_importado
+            )
+        else:
+            tipo_inicial, parametros = None, ()
+
         campo_tipo = ft.Dropdown(
-            label='Tipo SQL',
+            label="Tipo SQL",
             width=260,
-            value=dados.get('type'),
+            value=tipo_inicial,
             options=[
                 ft.DropdownOption(key=x, text=x)
-                for x in TIPOS
+                for x in TIPOS_SQL
             ],
         )
+        campo_tamanho = ft.TextField(
+            label="Tamanho",
+            hint_text="Ex.: 1000",
+            width=150,
+            keyboard_type=ft.KeyboardType.NUMBER,
+            visible=False,
+        )
+        campo_escala = ft.TextField(
+            label="Escala",
+            hint_text="Ex.: 2",
+            width=150,
+            keyboard_type=ft.KeyboardType.NUMBER,
+            visible=False,
+        )
+        parametros_view = ft.Row(
+            controls=[
+                campo_tamanho,
+                campo_escala,
+            ],
+            spacing=12,
+            visible=False,
+        )
+        
+        def atualizar_parametros_tipo(preservar_valores=False):
+            tipo = campo_tipo.value
+
+            parametrizado = tipo in (
+                "VARCHAR",
+                "CHAR",
+                "DECIMAL",
+            )
+
+            parametros_view.visible = parametrizado
+            campo_tamanho.visible = parametrizado
+            campo_escala.visible = tipo == "DECIMAL"
+
+            if not preservar_valores:
+                if tipo == "VARCHAR":
+                    campo_tamanho.value = "100"
+                    campo_escala.value = ""
+
+                elif tipo == "CHAR":
+                    campo_tamanho.value = "10"
+                    campo_escala.value = ""
+
+                elif tipo == "DECIMAL":
+                    campo_tamanho.value = "10"
+                    campo_escala.value = "2"
+
+                else:
+                    campo_tamanho.value = ""
+                    campo_escala.value = ""
+
+        def trocar_tipo(ev):
+            atualizar_parametros_tipo()
+            limpar_previa()
+            atualizar()
+
+        # recuperar parametros de um tipo SQL importado
+        if tipo_inicial:
+            atualizar_parametros_tipo()
+
+            if tipo_inicial in ("VARCHAR", "CHAR"):
+                campo_tamanho.value = str(parametros[0])
+
+            elif tipo_inicial == "DECIMAL":
+                campo_tamanho.value = str(parametros[0])
+                campo_escala.value = str(parametros[1])
+
+        campo_tipo.on_select = trocar_tipo
+
         campo_gerador = ft.Dropdown(
             label='Gerador',
             width=260,
@@ -66,43 +131,36 @@ def construir_gerador(voltar, atualizar, config_inicial=None):
         opcoes_view = ft.Row(controls=[minimo, maximo], spacing=12, visible=False)
 
         # recuperar configuraçoes importadas
-        opcoes_importadas = dados.get('options', {})
-
-        gerador_inicial = dados.get('generator')
+        opcoes_importadas = dados.get("options", {})
+        gerador_inicial = dados.get("generator")
 
         if gerador_inicial in NUMERICOS:
             opcoes_view.visible = True
             minimo.visible = True
             maximo.visible = True
 
-            if gerador_inicial == 'idade':
-                minimo.value = str(
-                    opcoes_importadas.get('min', 18)
-                )
+            minimo.value = str(
+                opcoes_importadas.get("min", 0)
+            )
 
-                maximo.value = str(
-                    opcoes_importadas.get('max', 90)
-                )
+            maximo.value = str(
+                opcoes_importadas.get("max", 10000)
+            )
 
-            else:
-                minimo.value = str(
-                    opcoes_importadas.get('min', 0)
-                )
-
-                maximo.value = str(
-                    opcoes_importadas.get('max', 10000)
-                )
-
+        
         def trocar_gerador(ev):
             numerico = campo_gerador.value in NUMERICOS
             opcoes_view.visible = numerico
             minimo.visible = numerico
             maximo.visible = numerico
-            if numerico and not minimo.value and not maximo.value:
-                if campo_gerador.value == 'idade':
-                    minimo.value, maximo.value = '18', '90'
-                else:
-                    minimo.value, maximo.value = '0', '10000'
+
+            if numerico:
+                if not minimo.value:
+                    minimo.value = "0"
+
+                if not maximo.value:
+                    maximo.value = "10000"
+
             limpar_previa()
             atualizar()
 
@@ -125,10 +183,11 @@ def construir_gerador(voltar, atualizar, config_inicial=None):
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             campo_nome,
             ft.Row(controls=[campo_tipo, campo_gerador], spacing=12, wrap=True),
+            parametros_view,
             opcoes_view,
         ], spacing=12)
-        linhas.append(dict(bloco=bloco, nome=campo_nome, tipo=campo_tipo,
-                           gerador=campo_gerador, minimo=minimo, maximo=maximo))
+        linhas.append(dict(bloco=bloco, nome=campo_nome, tipo=campo_tipo, 
+                           gerador=campo_gerador, minimo=minimo, maximo=maximo, tamanho=campo_tamanho, escala=campo_escala))
         colunas_view.controls.append(bloco)
         limpar_previa()
         atualizar()
@@ -137,9 +196,11 @@ def construir_gerador(voltar, atualizar, config_inicial=None):
         colunas = []
         for indice, linha in enumerate(linhas, 1):
             nome = (linha['nome'].value or '').strip()
-            tipo = linha['tipo'].value
+            tipo_base = linha['tipo'].value            
+            tipo = montar_tipo_sql(tipo_base, tamanho=linha["tamanho"].value, escala=linha["escala"].value)
+
             gerador = linha['gerador'].value
-            if not nome or not tipo or not gerador:
+            if not nome or not tipo_base or not gerador:
                 raise ValueError(f'Preencha nome, tipo SQL e gerador da coluna {indice}.')
             opcoes = {}
             if gerador in NUMERICOS:

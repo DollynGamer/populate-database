@@ -16,9 +16,9 @@
 O projeto ainda está em desenvolvimento e as próximas atualizações serão voltadas para as seguintes tarefas:
 
 - [x] Implementar interface
+- [x] Compatibilidade entre geradores e tipos SQL
+- [x] Respeitar o tamanho dos campos
 - [ ] Detectar Primary Keys e Auto Increment
-- [ ] Compatibilidade entre geradores e tipos SQL
-- [ ] Respeitar o tamanho dos campos
 - [ ] Detectar restrições UNIQUE e NOT NULL
 - [ ] Gerar dados relacionados entre colunas
 - [ ] Permitir valores personalizados
